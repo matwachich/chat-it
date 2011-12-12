@@ -1,1 +1,0 @@
-table: Users(pseudo, vrainom, age, sexe, localisation, presentation, password, avatar_id, socket, last_online, last_msg)
