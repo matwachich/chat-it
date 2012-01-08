@@ -1,6 +1,6 @@
 #cs ----------------------------------------------------------------------------
 
- AutoIt Version: 3.3.6.1
+ AutoIt Version: 3.3.8.0
  Author:         Matwachich
 
  Script Function:
@@ -8,17 +8,19 @@
 
 #ce ----------------------------------------------------------------------------
 
+#include <Crypt.au3>
 #include <SQLite.au3>
 #include <SQLite.dll.au3>
 
-Global Enum $DB_OK, $DB_CONSTRAINT, $DB_MAILBANNED, $DB_BADPWD, $DB_ERROR
-Global Enum $STATUS_ONLINE, $STATUS_BUSY, $STATUS_AWAY, $STATUS_INVISIBLE, $STATUS_OFFLINE
+Global Enum Step *2 $DB_OK = 1, $DB_CONSTRAINT, $DB_MAILBANNED, $DB_BADPWD, $DB_ERROR
+Global Enum Step *2 $STATUS_ONLINE = 1, $STATUS_BUSY, $STATUS_AWAY, $STATUS_INVISIBLE, $STATUS_OFFLINE
 
 ; ##############################################################
 ; Main
 
 Func _DB_Startup($sDebug = 0)
-	_SQLite_Startup()
+	_File_SQLite_dll(@ScriptDir & "\SQLite.dll")
+	_SQLite_Startup(@ScriptDir & "\SQLite.dll", False, 1)
 	If @error Then _Err(LNG($_L_SQLiteStartupFail), 1)
 	; ---
 	If $sDebug Then
@@ -32,11 +34,15 @@ Func _DB_Startup($sDebug = 0)
 	_SQLite_Exec(-1, 'CREATE TABLE IF NOT EXISTS banned_ip (ip UNIQUE ON CONFLICT FAIL)')
 	_SQLite_Exec(-1, 'CREATE TABLE IF NOT EXISTS banned_mail (mail UNIQUE ON CONFLICT FAIL)')
 	_SQLite_Exec(-1, 'CREATE TABLE IF NOT EXISTS deleted_users (nom UNIQUE ON CONFLICT FAIL, delete_date)')
+	_SQLite_Exec(-1, 'CREATE TABLE IF NOT EXISTS avatars (bin_data)')
+	; ---
+	OnAutoItExitRegister("_DB_Shutdown")
 EndFunc
 
 Func _DB_Shutdown()
 	_SQLite_Close()
 	_SQLite_Shutdown()
+	FileDelete(@ScriptDir & "\SQLite.dll")
 EndFunc
 
 ; ##############################################################
@@ -47,7 +53,7 @@ Func _DB_User_Add($sPseudo, $sMail, $sPwdHash)
 	$sMail = _SQLite_Escape($sMail)
 	$sPwdHash = _SQLite_Escape($sPwdHash)
 	; ---
-	If _DB_Mail_IsBanned($sMail) Then Return SetError(1, 0, -2)
+	If _DB_Mail_IsBanned($sMail) Then Return SetError(1, 0, $DB_MAILBANNED)
 	; ---
 	Local $val = $sPseudo & ', "", ' & $sMail & ', "", "", "", "", ' & $sPwdHash & ', "", -1, "", "", ""'
 	Switch _SQLite_Exec(-1, 'INSERT INTO users VALUES (' & $val & ')')
@@ -60,7 +66,14 @@ Func _DB_User_Add($sPseudo, $sMail, $sPwdHash)
 	EndSwitch
 EndFunc
 
-Func _DB_User_Update($sPseudo, $sNom = Default, $sMail = Default, $sAge = Default, $sSexe = Default, $sLocalisation = Default, $sPresentation = Default)
+Func _DB_User_Update($sPseudo, _
+						$sNom = Default, _
+						$sMail = Default, _
+						$sAge = Default, _
+						$sSexe = Default, _
+						$sLocalisation = Default, _
+						$sPresentation = Default)
+	; ---
 	$sPseudo = _SQLite_Escape($sPseudo)
 	; ---
 	Local $val
@@ -107,7 +120,13 @@ Func _DB_User_Update($sPseudo, $sNom = Default, $sMail = Default, $sAge = Defaul
 	EndSwitch
 EndFunc
 
-Func _DB_User_Update2($sPseudo, $avatar_id = Default, $socket = Default, $status = Default, $last_online = Default, $last_ip = Default)
+Func _DB_User_Update2($sPseudo, _
+						$avatar_id = Default, _
+						$socket = Default, _
+						$status = Default, _
+						$last_online = Default, _
+						$last_ip = Default)
+	; ---
 	$sPseudo = _SQLite_Escape($sPseudo)
 	; ---
 	Local $val
@@ -229,7 +248,11 @@ EndFunc
 ; Delete
 
 Func _DB_User_Delete($sPseudo)
-	
+	$sPseudo = _SQLite_Escape($sPseudo)
+	If _SQLite_Exec(-1, 'DELETE FROM avatars WHERE rowid=(SELECT avatar_id FROM users WHERE pseudo=' & $sPseudo & ')') <> $SQLITE_OK Or _
+		_SQLite_Exec(-1, 'DELETE FROM users WHERE pseudo=' & $sPseudo) <> $SQLITE_OK Then Return $DB_ERROR
+	; ---
+	Return $DB_OK
 EndFunc
 
 ; ##############################################################
@@ -251,14 +274,11 @@ Func _DB_Debug_Display()
 	; ---
 EndFunc
 
-Func _MD5($data)
-	Return _Crypt_HashData($data, $CALG_MD5)
-EndFunc
-
 Func _DB_CheckErr($critical = 0, $sFunc = "")
 	If _SQLite_ErrCode() <> $SQLITE_OK Then
-		If Not @compiled Then MsgBox(0, "Error", "Function: " & $sFunc)
-		_Err(_SQLite_ErrMsg(), $critical)
+		Local $err = _SQLite_ErrMsg()
+		If Not @Compiled Then $err = $sFunc & ":" & @CRLF & $err
+		_Err($err, $critical)
 		Return 1
 	EndIf
 	Return 0

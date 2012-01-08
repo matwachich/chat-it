@@ -9,11 +9,13 @@
 #ce ----------------------------------------------------------------------------
 
 Global Enum _
-	$_L_ProgName
+	$_L_ProgName, _
+	$_L_SQLiteStartupFail
 
 Global $__Lang[1] = _
 [
-	"ChatIt! Server"
+	"ChatIt! Server",
+	"SQLite Startup Failed!"
 ]
 
 Func LNG($id, $v1 = Default, $v2 = Default, $v3 = Default, $v4 = Default, $v5 = Default)
